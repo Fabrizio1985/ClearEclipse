@@ -57,11 +57,13 @@ List* listAllFiles(const char *file)
 
     while ((entry = readdir(dir)) != NULL) {
 
-    	if (strcmp(entry->d_name,".")==0 || strcmp(entry->d_name,"..")==0) continue;
+    	if (strcmp(entry->d_name,".")==0 || strcmp(entry->d_name,"..")==0 ) continue;
 
     	char *path = createPath(file, entry->d_name);
 
-    	insertElementIntoList(allFile, path);
+    	if(!isFolder(path)) {
+    		insertElementIntoList(allFile, path);
+    	}
     }
 
     closedir(dir);
@@ -106,6 +108,7 @@ void printHelp() {
 
 	printf("\nOpzioni:");
 	printf("\n\t -h \t\t Mostrare help");
+	printf("\n\t -d \t\t Mostrare solo i duplicati");
 	printf("\n\t --drayrun \t Mostra solo i file da cancellare");
 
 	exit(0);
@@ -119,14 +122,15 @@ int main(int argc, char **argv) {
 	char *date = NULL;
 	char *value = NULL;
 	static int drayRun;
+	static int showDuplicate;
 
 	static struct option long_options[] = {
 		/* These options set a flag. */
 		{ "drayrun", 	no_argument, 			&drayRun, 	1 	},
-		{ "help",  		no_argument,       		0, 			'h' },
+		{ "d", 			no_argument, 			NULL, 		'd' },
+		{ "h",  		no_argument,       		NULL, 		'h' },
 		/* The following options don't set a flag. */
 		{ "value1", 	required_argument, 		NULL, 		'v' },
-		{ "value2", 	required_argument, 		NULL, 		'v2' },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -135,7 +139,7 @@ int main(int argc, char **argv) {
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		int c = getopt_long(argc, argv, "hv:v2:", long_options, &option_index);
+		int c = getopt_long(argc, argv, "hdv:", long_options, &option_index);
 
 		/* Detect the end of the options. */
 		if (c == -1) {
@@ -146,6 +150,9 @@ int main(int argc, char **argv) {
 			case 0:
 				/* (In this example) only options which set */
 				/* a flag return zero, so do nothing. */
+				break;
+			case 'd':
+				showDuplicate = 1;
 				break;
 			case 'h':
 				printHelp();
@@ -161,14 +168,14 @@ int main(int argc, char **argv) {
 	}
 
 	for (int x = optind; x < argc; x++) {
-		if(x == 2) {
+		if(x == optind) {
 			path = argv[x];
-		} else if(x == 3) {
+		} else {
 			date = argv[x];
 		}
 	}
 
-	if((NULL == path || strlen(path) == 0) || (NULL == date || strlen(date) == 0)){
+	if((NULL == path || strlen(path) == 0) || ((NULL == date || strlen(date) == 0) && showDuplicate == 0)){
 		printf("Errore sintassi non valida\n");
 
 		printHelp();
@@ -177,6 +184,12 @@ int main(int argc, char **argv) {
 	List *all = listAllFiles(path);
 	List *duplicate = extractDuplicates(mapList(all, mapped));
 	List *toDelete = initList();
+
+	if(showDuplicate == 1) {
+		printList(duplicate);
+		exit(0);
+	}
+
 
 	for (int x = 0; x < all->used; ++x) {
 		char *path = getElement(all, x);
@@ -190,22 +203,30 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if(drayRun == 0 && toDelete->size > 0) {
+	if(drayRun == 0 && toDelete->used > 0) {
 
 		char input;
 		printf("\nDo you want to delete files? Y / N\n");
 		scanf("%c",&input);
 
-		if(input == 'Y') {
+		if (input == 'Y') {
 
 			for (int x = 0; x < toDelete->used; ++x) {
 
-				print_progress(x, toDelete->used - 1);
+				char *path = getElement(toDelete, x);
+				int status = remove(path);
 
-				char *path = getElement(all, x);
-				remove(path);
+				/*Check if file has been properly deleted*/
+				if (status != 0) {
+					printf("Error on delete file %s\n", path);
+					exit(0);
+				}
+
+				print_progress(x, toDelete->used - 1);
 			}
 		}
+	} else {
+		printf("Nothing to delete\n");
 	}
 
 	exit(0);
